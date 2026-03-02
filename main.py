@@ -98,9 +98,6 @@ def main():
     cited_texts = [c.cited_text for c in citations]
     full_cited = "\n\n".join(cited_texts)
 
-    print("full cited text:")
-    print(full_cited, "\n")
-
     for tool_call in tool_calls:
         for path, value in iter_uncited_paths(tool_call.input, full_cited):
             print(
