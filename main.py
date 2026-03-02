@@ -1,5 +1,6 @@
 import base64
 import anthropic
+import sys
 from dotenv import load_dotenv
 
 from schemas.parties import Parties
@@ -47,10 +48,11 @@ TOOL_MODELS = {
 }
 
 
-def main(pdf_path: str):
-    pdf_base64 = load_pdf(pdf_path)
-    client = anthropic.Anthropic()
+def main():
+    contract_file_path = " ".join(sys.argv[1:])
+    pdf_base64 = load_pdf(contract_file_path)
 
+    client = anthropic.Anthropic()
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
         max_tokens=4096,
@@ -96,6 +98,9 @@ def main(pdf_path: str):
     cited_texts = [c.cited_text for c in citations]
     full_cited = "\n\n".join(cited_texts)
 
+    print("full cited text:")
+    print(full_cited, "\n")
+
     for tool_call in tool_calls:
         for path, value in iter_uncited_paths(tool_call.input, full_cited):
             print(
@@ -104,5 +109,7 @@ def main(pdf_path: str):
 
 
 if __name__ == "__main__":
-    ## Test with mock contract
-    main("contract_examples/contract_one.pdf")
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <contract_file_path>")
+        sys.exit(1)
+    main()
