@@ -16,7 +16,6 @@ def load_pdf(path: str) -> str:
 
 
 def iter_uncited_paths(data, cited_text: str, path: str = ""):
-    """Yield (path, value) for every leaf value not found in cited text."""
     if isinstance(data, dict):
         for key, value in data.items():
             yield from iter_uncited_paths(
@@ -25,8 +24,10 @@ def iter_uncited_paths(data, cited_text: str, path: str = ""):
     elif isinstance(data, list):
         for i, item in enumerate(data):
             yield from iter_uncited_paths(item, cited_text, f"{path}[{i}]")
-    elif isinstance(data, (str, int, float)) and str(data) not in cited_text:
-        yield path, data
+    elif isinstance(data, str):
+        parts = [p.strip() for p in data.split(",")]
+        if data not in cited_text and not all(p in cited_text for p in parts):
+            yield path, data
 
 
 tools = [
@@ -81,6 +82,7 @@ def main():
         ],
     )
 
+    # Parse response
     citations = []
     tool_calls = []
 
@@ -90,19 +92,31 @@ def main():
         elif block.type == "tool_use":
             tool_calls.append(block)
 
+    # Pydantic validation
+    validated_results = {}
     for tool_call in tool_calls:
-        validated = TOOL_MODELS[tool_call.name](**tool_call.input)
-        print(f"{tool_call.name}")
-        print(validated, "\n")
+        try:
+            validated = TOOL_MODELS[tool_call.name](**tool_call.input)
+            validated_results[tool_call.name] = validated
+        except Exception as e:
+            print(f"{tool_call.name}: {e}")
 
+    # Citation grounding check — using validated model output so only strings are checked
     cited_texts = [c.cited_text for c in citations]
     full_cited = "\n\n".join(cited_texts)
 
-    for tool_call in tool_calls:
-        for path, value in iter_uncited_paths(tool_call.input, full_cited):
-            print(
-                f"WARNING, this information may need manual review: {tool_call.name} — {path}: '{value}'"
-            )
+    warning_count = 0
+    for name, validated in validated_results.items():
+        for path, value in iter_uncited_paths(validated.model_dump(), full_cited):
+            warning_count += 1
+            print(f"{name} — {path}: '{value}'")
+
+    if warning_count == 0:
+        print("All values grounded in citations")
+    else:
+        print(f"\n{warning_count} value(s) not found in cited text")
+
+    print(validated_results)
 
 
 if __name__ == "__main__":
